@@ -170,7 +170,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error: {e}")
         threads.pop(user_id, None)
-        await update.message.reply_text("⚠️ Нещо се обърка. Опитайте отново.")
+        await update.message.reply_text(f"⚠️ Error: {e}")
 
 
 # ─── FEATURE 2: BROADCAST TO ALL USERS ───────────────────────────────
