@@ -422,6 +422,18 @@ def main():
     logger.info(f"Channel: {CHANNEL_ID or 'Not set'}")
     app.run_polling(drop_pending_updates=True)
 
+async def test_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Test raw connection to OpenAI."""
+    import httpx
+    try:
+        # Test 1: Can we reach OpenAI at all?
+        async with httpx.AsyncClient() as http:
+            r = await http.get("https://api.openai.com/v1/models", 
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"}, 
+                timeout=10)
+            await update.message.reply_text(f"Test 1 - Status: {r.status_code}\n{r.text[:500]}")
+    except Exception as e:
+        await update.message.reply_text(f"Test 1 - Failed: {type(e).__name__}: {e}")
 
 if __name__ == "__main__":
     main()
