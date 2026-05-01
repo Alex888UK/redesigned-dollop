@@ -331,12 +331,14 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── CHANNEL POST ─────────────────────────────────────────────────────
 
 CONTENT_PROMPTS = [
-    "Write a short engaging Telegram post in Bulgarian about one Atomy product benefit. "
-    "Include an emoji. Keep it under 300 characters.",
-    "Write a short motivational Telegram post in Bulgarian about the Atomy business opportunity. "
-    "Include an emoji. Keep it under 300 characters.",
-    "Write a short Telegram tip in Bulgarian about skincare or health using Atomy products. "
-    "Include an emoji. Keep it under 300 characters.",
+    "Write an engaging Telegram post in Bulgarian about one Atomy product benefit. "
+    "Include emojis. Write 150-200 words. Follow the posting guide document.",
+
+    "Write a motivational Telegram post in Bulgarian about the Atomy business opportunity. "
+    "Include emojis. Write 150-200 words. Follow the posting guide document.",
+
+    "Write a Telegram tip in Bulgarian about skincare or health using Atomy products. "
+    "Include emojis. Write 150-200 words. Follow the posting guide document.",
 ]
 
 
