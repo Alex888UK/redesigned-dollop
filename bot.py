@@ -111,34 +111,33 @@ def get_response(user_id: int, user_message: str) -> str:
     return reply
 
 def clean_content(content: str) -> str:
-    """Премахва [1],[2], disclaimer и хаштагове от AI отговора."""
-    # Премахва [1], [2] и т.н.
     content = re.sub(r'\[\d+\]', '', content)
-    # Премахва disclaimer ако AI го е добавил
     content = re.sub(
         r'⚠️ Продуктите на Atomy.*?atomybgakademia\.org/contacts',
         '',
         content,
         flags=re.DOTALL
     )
-    # Премахва всички хаштагове — ще ги добавим от кода
     content = re.sub(r'#\S+', '', content)
     return content.strip()
 
 def extract_hashtag(raw: str) -> str:
-    """Извлича валиден хаштаг от AI отговора."""
     for tag in ALLOWED_HASHTAGS:
         if tag.lower() in raw.lower():
             return tag
-    return "#Здраве"  # резервен
+    return "#Здраве"
 
 def build_footer(extra_tag: str) -> str:
-    """Изгражда задължителния footer."""
     return f"\n\n{DISCLAIMER}\n\n{FIXED_HASHTAGS} {extra_tag}"
 
 def generate_content(prompt: str) -> str:
     full_prompt = (
         f"{prompt}\n\n"
+        f"СТРУКТУРА НА ПОСТА:\n"
+        f"1. ПЪРВИ РЕД — кратък, закачлив хук (1 изречение, макс 10 думи). "
+        f"Може да е въпрос, изненадващ факт или силно твърдение. Без емоджи на хука.\n"
+        f"2. ОСНОВЕН ТЕКСТ — информация за продукта от системния промпт.\n"
+        f"3. ПРИЗИВ ЗА ДЕЙСТВИЕ (CTA) — един ред в края.\n\n"
         f"ВАЖНО: {HASHTAG_INSTRUCTION}\n"
         f"НЕ добавяй disclaimer или контактна информация."
     )
@@ -154,17 +153,165 @@ def generate_content(prompt: str) -> str:
     )
 
     raw = response.choices[0].message.content
-
-    # 1. Извлечи хаштага от суровия отговор
     extra_tag = extract_hashtag(raw)
-
-    # 2. Почисти съдържанието
     content = clean_content(raw)
-
-    # 3. Добави footer с disclaimer + хаштагове
     footer = build_footer(extra_tag)
-
     return content + footer
+
+# ─── CONTENT PROMPTS ──────────────────────────────────────────────────
+CONTENT_PROMPTS = [
+    # ── ЗДРАВНИ ДОБАВКИ ──
+    "Напиши пост за Telegram канал за HemoHIM G. "
+    "Включи: цена 105.00 EUR, 73,000 PV, билките Angelica sinensis, Ligusticum chuanxiong, Paeonia lactiflora, разработен с KAERI. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Inner Collagen. "
+    "Включи: цена 34.00 EUR, 19,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Alaska E-Omega 3. "
+    "Включи: цена 22.50 EUR, 9,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Vitamin C. "
+    "Включи: цена 22.50 EUR, 9,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Pure Spirulina 100%. "
+    "Включи: цена 24.00 EUR, 10,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Eye Lutein. "
+    "Включи: цена 32.00 EUR, 15,000 PV, нов продукт. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Noni Bottle. "
+    "Включи: цена 49.00 EUR, 35,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Fermented Noni Drink Pouch. "
+    "Включи: цена 56.50 EUR, 37,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Pomegranate Mixed Fruit Jelly. "
+    "Включи: цена 67.50 EUR, 30,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за The Ultimate Set (HemoHIM G + Noni Pouch). "
+    "Включи: цена 159.00 EUR, 150,000 PV, промо оферта. Използвай 1-2 емоджи.",
+
+    # ── КОЗМЕТИКА ──
+    "Напиши пост за Telegram канал за Absolute Ampoule. "
+    "Включи: цена 41.00 EUR, 27,000 PV, от линията Absolute. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Absolute Nutrition Cream. "
+    "Включи: цена 37.00 EUR, 23,000 PV, от линията Absolute. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Absolute 24K Gold Night Mask. "
+    "Включи: цена 28.00 EUR, 21,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Evening Care 4 Set. "
+    "Включи: цена 37.00 EUR, 14,000 PV, комплект за вечерна грижа 4 продукта. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Marine Ampoule Eye Patch. "
+    "Включи: цена 19.50 EUR, 10,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Absolute Urban Shield Sun Cushion. "
+    "Включи: цена 15.00 EUR, 9,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Absolute Essence Sunscreen. "
+    "Включи: цена 12.50 EUR, 6,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Sun Stick. "
+    "Включи: цена 12.00 EUR, 5,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Daily Expert Mask Moisturising. "
+    "Включи: цена 12.50 EUR, 5,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Hand Cream. "
+    "Включи: цена 15.50 EUR, 7,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Body Lotion. "
+    "Включи: цена 12.00 EUR, 4,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Lip Glow. "
+    "Включи: цена 12.00 EUR, 6,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Adelica Volume Mascara Black. "
+    "Включи: цена 11.50 EUR, 6,250 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Foam Cleanser. "
+    "Включи: цена 9.50 EUR, 3,500 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Deep Cleanser. "
+    "Включи: цена 9.50 EUR, 3,500 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Foot Nourishing Cream. "
+    "Включи: цена 12.00 EUR, 7,000 PV. Използвай 1-2 емоджи.",
+
+    # ── ГРИЖА ЗА КОСА ──
+    "Напиши пост за Telegram канал за Herbal Shampoo. "
+    "Включи: цена 14.50 EUR, 7,000 PV, билков шампоан за здрав скалп. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Protein Intensive Shampoo. "
+    "Включи: цена 20.00 EUR, 10,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Protein Intensive Treatment. "
+    "Включи: цена 16.50 EUR, 9,500 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Scalpcare 2 Set. "
+    "Включи: цена 28.00 EUR, 11,000 PV, комплект 2 продукта. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Hair Oil Complex. "
+    "Включи: цена 13.50 EUR, 6,000 PV. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Saengmodan Hair Tonic. "
+    "Включи: цена 14.00 EUR, 7,000 PV. Използвай 1-2 емоджи.",
+
+    # ── ОРАЛНА ХИГИЕНА ──
+    "Напиши пост за Telegram канал за Atomy Toothpaste 200g x5. "
+    "Включи: цена 18.50 EUR, 4,000 PV, комплект 5 броя. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Oral Care System. "
+    "Включи: цена 14.50 EUR, 7,000 PV. Използвай 1-2 емоджи.",
+
+    # ── ЛИЧНА ГРИЖА И ДОМА ──
+    "Напиши пост за Telegram канал за Sheet Laundry Detergent. "
+    "Включи: цена 11.00 EUR, 6,500 PV, перилен препарат на листчета. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Cafe Arabica 50T. "
+    "Включи: цена 12.50 EUR, 2,000 PV, премиум кафе 50 пакетчета. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Atomy Puer Tea. "
+    "Включи: цена 25.00 EUR, 14,000 PV. Използвай 1-2 емоджи.",
+
+    # ── ПРОМОЦИИ EU ──
+    "Напиши пост за Telegram канал за Easter Promotion 1 — Triple Sun с Double PV. "
+    "Включи: 3x Sun Stick + 3x Absolute Urban Shield Sun Cushion, цена 81.00 EUR, 84,000 PV (двоен PV). Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Easter Promotion 2 — Medicook 4SET. "
+    "Включи: 9-частен комплект за готвене, цена 450.00 EUR (намалена от 550.00 EUR), 300,000 PV + 20,000 бонус, ограничено количество. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за THE FAME линия. "
+    "Включи: цена 99.50 EUR, 60,000 PV. Използвай 1-2 емоджи.",
+
+    # ── ПРОМОЦИИ UK ──
+    "Напиши пост за Telegram канал за HemoHIM G Challenge UK. "
+    "Включи: цена £93.00, 73,000 PV, безплатна доставка. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Best of Atomy Bundle 2026 UK. "
+    "Включи: цена £385.00, 300,000 PV, безплатна доставка. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Mino Knives Set of 2 UK. "
+    "Включи: цена £150.00, 70,000 PV, безплатна доставка, нов продукт, ръчно изработени японски ножове. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Organic Fermented Noni Pouch x4 UK. "
+    "Включи: цена £180.00, 150,000 PV, безплатна доставка. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram канал за Synergy Ampoule Program Set of 3 UK. "
+    "Включи: цена £260.00, 250,000 PV, безплатна доставка. Използвай 1-2 емоджи.",
+
+    # ── БИЗНЕС ──
+    "Напиши мотивационен пост за Telegram за бизнес възможността с Atomy. "
+    "Включи: безплатна регистрация, без месечни такси, без задължителни покупки, бинарна структура. Използвай 1-2 емоджи.",
+
+    "Напиши пост за Telegram за Atomy Mastership награди UK. "
+    "Включи: Sharon-Rose/Star Master билети £600, Royal/Crown/Imperial Master билети £3,000. Използвай 1-2 емоджи.",
+
+    "Напиши образователен пост за Telegram за принципа Masstige на Atomy. "
+    "Включи: Mass + Prestige, абсолютно качество на абсолютна цена, основана 2009. Използвай 1-2 емоджи.",
+]
 
 # ─── BOT HANDLERS ─────────────────────────────────────────────────────
 
@@ -281,23 +428,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── CHANNEL POST ─────────────────────────────────────────────────────
 
-CONTENT_PROMPTS = [
-    "Напиши пост за Telegram канал на български за ЕДИН продукт на Atomy. "
-    "Използвай само информацията от системния промпт. "
-    "Включи точната цена в EUR или GBP и PV. Използвай 1-2 емоджи.",
-
-    "Напиши мотивационен пост за Telegram на български за бизнес възможността с Atomy. "
-    "Използвай само факти от системния промпт. Използвай 1-2 емоджи.",
-
-    "Напиши пост за Telegram на български за грижа за кожата с продукти на Atomy. "
-    "Използвай само информацията от системния промпт. "
-    "Включи точната цена и PV. Използвай 1-2 емоджи.",
-
-    "Напиши пост за Telegram на български за актуална промоция на Atomy EU или UK. "
-    "Използвай само информацията от системния промпт. "
-    "Включи точната цена и PV. Използвай 1-2 емоджи.",
-]
-
 async def auto_post_to_channel(context: ContextTypes.DEFAULT_TYPE):
     if not CHANNEL_ID:
         return
@@ -306,7 +436,7 @@ async def auto_post_to_channel(context: ContextTypes.DEFAULT_TYPE):
     try:
         content = generate_content(prompt)
         await context.bot.send_message(chat_id=CHANNEL_ID, text=content)
-        logger.info("Auto-posted to channel")
+        logger.info(f"Auto-posted: {prompt[:60]}...")
     except Exception as e:
         logger.error(f"Auto-post failed: {e}")
 
@@ -338,6 +468,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Модел: {MODEL}\n"
         f"• Канал: {CHANNEL_ID or 'Не е зададен'}\n"
         f"• Пост часове (UTC): {POST_HOURS}\n"
+        f"• Брой промпти: {len(CONTENT_PROMPTS)}\n"
         f"• System prompt: {len(SYSTEM_PROMPT)} символа"
     )
 
@@ -364,7 +495,7 @@ def main():
                 job_queue.run_daily(auto_post_to_channel, time=time(hour=hour, minute=0))
                 logger.info(f"Scheduled auto-post at {hour}:00 UTC")
 
-    logger.info(f"Bot running | Model: {MODEL} | Admins: {ADMIN_IDS}")
+    logger.info(f"Bot running | Model: {MODEL} | Admins: {ADMIN_IDS} | Prompts: {len(CONTENT_PROMPTS)}")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
