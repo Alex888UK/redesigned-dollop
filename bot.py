@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 import asyncio
@@ -25,9 +26,35 @@ POST_HOURS = [int(x.strip()) for x in os.environ.get("POST_HOURS", "9,18").split
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 USERS_FILE = Path("users.json")
 
-# ─── LOAD SYSTEM PROMPT FROM FILE ────────────────────────────────────
+# ─── LOAD SYSTEM PROMPT ───────────────────────────────────────────────
 SYSTEM_PROMPT = Path("system_prompt.txt").read_text(encoding="utf-8")
 logger.info(f"System prompt loaded: {len(SYSTEM_PROMPT)} characters")
+
+# ─── FOOTER ───────────────────────────────────────────────────────────
+# 2 фиксирани хаштага — AI добавя 1 допълнителен от разрешения списък
+FIXED_HASHTAGS = "#АтомиПродукти #АтомиЗдраве"
+
+ALLOWED_HASHTAGS = [
+    "#КорейскаКозметика",
+    "#АтомиКрасота",
+    "#HemoHIM",
+    "#КорейскиПродукти",
+    "#АтомиКозметика",
+    "#Здраве",
+]
+
+DISCLAIMER = (
+    "⚠️ Продуктите на Atomy се продават САМО в официалните сайтове: "
+    "🇪🇺 eu.atomy.com | 🇬🇧 uk.atomy.com. "
+    "Atomy няма официален сайт за продажби в България. "
+    "За контакти: https://atomybgakademia.org/contacts"
+)
+
+HASHTAG_INSTRUCTION = (
+    f"В самия край на поста добави САМО ЕДИН хаштаг от този списък "
+    f"(избери най-подходящия за темата на поста): "
+    + " ".join(ALLOWED_HASHTAGS)
+)
 
 # ─── OpenAI CLIENT ────────────────────────────────────────────────────
 import httpx
@@ -57,7 +84,7 @@ def register_user(user_id: int):
         known_users.add(user_id)
         save_users(known_users)
 
-# ─── CONVERSATION HISTORY ────────────────────────────────────────────
+# ─── CONVERSATION HISTORY ─────────────────────────────────────────────
 conversations = {}
 MAX_HISTORY = 20
 
@@ -84,19 +111,55 @@ def get_response(user_id: int, user_message: str) -> str:
     conversations[user_id].append({"role": "assistant", "content": reply})
     return reply
 
+def clean_content(content: str) -> str:
+    """Премахва [1], [2] и стария disclaimer ако AI-ят го е добавил."""
+    content = re.sub(r'\[\d+\]', '', content)
+    content = re.sub(
+        r'⚠️ Продуктите на Atomy.*?atomybgakademia\.org/contacts',
+        '',
+        content,
+        flags=re.DOTALL
+    )
+    # Премахва излишни хаштагове в края — ще ги добавим ние
+    content = re.sub(r'(#\S+\s*){2,}$', '', content, flags=re.MULTILINE)
+    return content.strip()
+
+def build_footer(ai_hashtag: str) -> str:
+    """Изгражда задължителния footer с disclaimer + хаштагове."""
+    # Вземи само валидни хаштагове от AI отговора
+    found = None
+    for tag in ALLOWED_HASHTAGS:
+        if tag.lower() in ai_hashtag.lower():
+            found = tag
+            break
+    extra_tag = found if found else "#Здраве"
+    return f"\n{DISCLAIMER}\n\n{FIXED_HASHTAGS} {extra_tag}"
+
 def generate_content(prompt: str) -> str:
+    full_prompt = (
+        f"{prompt}\n\n"
+        f"ВАЖНО: {HASHTAG_INSTRUCTION}\n"
+        f"НЕ добавяй disclaimer или контактна информация — тя ще бъде добавена автоматично."
+    )
+
     response = openai_client.chat.completions.create(
         model=MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": full_prompt},
         ],
         max_tokens=2000,
-        temperature=0.7,
+        temperature=0.3,
     )
-    return response.choices[0].message.content
 
-# ─── BOT HANDLERS ────────────────────────────────────────────────────
+    raw = response.choices[0].message.content
+    content = clean_content(raw)
+
+    # Извлечи хаштага от AI отговора преди да го почистим
+    footer = build_footer(raw)
+    return content + footer
+
+# ─── BOT HANDLERS ─────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_user(update.effective_user.id)
@@ -179,7 +242,7 @@ async def broadcast_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         content = generate_content(prompt)
         await update.message.reply_text(
             f"📝 Преглед:\n\n{content}\n\n"
-            f"/confirm_broadcast за изпращане до {len(known_users)} потребители, или /cancel."
+            f"Изпрати /confirm_broadcast за публикуване до {len(known_users)} потребители, или /cancel."
         )
         context.user_data["pending_broadcast"] = content
     except Exception as e:
@@ -212,17 +275,20 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── CHANNEL POST ─────────────────────────────────────────────────────
 
 CONTENT_PROMPTS = [
-    "Напиши пост за Telegram канал на български за един продукт на Atomy. "
-    "Използвай емоджита. Напиши 150-200 думи. Следвай ръководството за публикации.",
+    "Напиши пост за Telegram канал на български за ЕДИН продукт на Atomy. "
+    "Използвай само информацията от системния промпт. "
+    "Включи точната цена в EUR или GBP и PV. Използвай 1-2 емоджи.",
 
     "Напиши мотивационен пост за Telegram на български за бизнес възможността с Atomy. "
-    "Използвай емоджита. Напиши 150-200 думи. Следвай ръководството за публикации.",
+    "Използвай само факти от системния промпт. Използвай 1-2 емоджи.",
 
-    "Напиши съвет за Telegram на български за грижа за кожата или здраве с продукти на Atomy. "
-    "Използвай емоджита. Напиши 150-200 думи. Следвай ръководството за публикации.",
+    "Напиши пост за Telegram на български за грижа за кожата с продукти на Atomy. "
+    "Използвай само информацията от системния промпт. "
+    "Включи точната цена и PV. Използвай 1-2 емоджи.",
 
-    "Напиши пост за Telegram на български за актуална промоция на Atomy. "
-    "Използвай емоджита. Напиши 150-200 думи. Следвай ръководството за публикации.",
+    "Напиши пост за Telegram на български за актуална промоция на Atomy EU или UK. "
+    "Използвай само информацията от системния промпт. "
+    "Включи точната цена и PV. Използвай 1-2 емоджи.",
 ]
 
 async def auto_post_to_channel(context: ContextTypes.DEFAULT_TYPE):
@@ -264,6 +330,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Потребители: {len(known_users)}\n"
         f"• Модел: {MODEL}\n"
         f"• Канал: {CHANNEL_ID or 'Не е зададен'}\n"
+        f"• Пост часове (UTC): {POST_HOURS}\n"
         f"• System prompt: {len(SYSTEM_PROMPT)} символа"
     )
 
