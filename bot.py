@@ -626,6 +626,27 @@ async def post_article(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ Грешка: {e}")
 
+
+async def test_telegraph(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    import json
+    
+    # Абсолютно минимален тест
+    nodes = [{"tag": "p", "children": ["Hello world"]}]
+    content_json = json.dumps(nodes)
+    
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"https://api.telegra.ph/createPage?access_token={TELEGRAPH_TOKEN}",
+            data={
+                "title": "Test",
+                "content": content_json,
+            }
+        )
+    
+    await update.message.reply_text(f"Response: {resp.text[:500]}")
+
 # ─── MAIN ─────────────────────────────────────────────────────────────
 
 def main():
@@ -641,6 +662,7 @@ def main():
     app.add_handler(CommandHandler("post_now", post_now))
     app.add_handler(CommandHandler("post_link", post_link))
     app.add_handler(CommandHandler("post_article", post_article))
+    app.add_handler(CommandHandler("test_telegraph", test_telegraph))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
