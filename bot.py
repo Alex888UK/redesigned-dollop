@@ -511,21 +511,32 @@ async def create_telegraph_article(title: str, body: str) -> str:
     import json
 
     # Telegraph приема HTML съдържание
-    html_body = body.replace("\n\n", "</p><p>").replace("\n", "<br>")
-    html_body = f"<p>{html_body}</p>"
+    # Telegraph приема JSON Node формат
+    nodes = []
+    for para in body.split("\n\n"):
+        para = para.strip()
+        if para:
+            nodes.append({"tag": "p", "children": [para]})
 
-    # Добави CTA в края
-    html_body += (
-        f'<p><strong>📢 Последвай нашия Telegram канал за още новини и промоции:</strong></p>'
-        f'<p><a href="https://t.me/{CHANNEL_ID.replace("@", "")}">👉 Присъедини се към {CHANNEL_ID}</a></p>'
-        f'<p><a href="https://atomybgakademia.org">🌐 atomybgakademia.org</a></p>'
-    )
+    # CTA в края
+    channel_handle = CHANNEL_ID.replace("@", "")
+    nodes.append({"tag": "p", "children": [
+        {"tag": "strong", "children": ["📢 Последвай нашия Telegram канал:"]}
+    ]})
+    nodes.append({"tag": "p", "children": [
+        {"tag": "a", "attrs": {"href": f"https://t.me/{channel_handle}"}, 
+         "children": [f"👉 Присъедини се към {CHANNEL_ID}"]}
+    ]})
+    nodes.append({"tag": "p", "children": [
+        {"tag": "a", "attrs": {"href": "https://atomybgakademia.org"}, 
+         "children": ["🌐 atomybgakademia.org"]}
+    ]})
 
     data = {
         "access_token": TELEGRAPH_TOKEN,
         "title": title,
-        "content": html_body,
-        "author_name": "Atomy BG Академия",
+        "content": json.dumps(nodes, ensure_ascii=False),
+        "author_name": "Atomy BG Akademia",
         "author_url": "https://atomybgakademia.org",
         "return_content": False,
     }
