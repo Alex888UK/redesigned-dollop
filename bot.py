@@ -472,6 +472,149 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• System prompt: {len(SYSTEM_PROMPT)} символа"
     )
 
+
+async def post_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Нямате достъп.")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "Използване: /post_link <продукт> <линк>\n"
+            "Пример: /post_link HemoHIM G https://graph.org/..."
+        )
+        return
+
+    link = context.args[-1]
+    product = " ".join(context.args[:-1])
+
+    prompt = (
+        f"Напиши кратък Telegram пост за {product}. "
+        f"Използвай само информацията от системния промпт. "
+        f"В самия край на основния текст — преди disclaimer — добави точно този ред: "
+        f"📖 Прочети повече: {link}"
+    )
+
+    await update.message.reply_text("🤖 Генериране и публикуване...")
+    try:
+        content = generate_content(prompt)
+        await context.bot.send_message(chat_id=CHANNEL_ID, text=content)
+        await update.message.reply_text(f"✅ Публикувано:\n\n{content}")
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Грешка: {e}")
+
+
+# ─── TELEGRAPH ────────────────────────────────────────────────────────
+TELEGRAPH_TOKEN = os.environ.get("TELEGRAPH_TOKEN", "")
+
+async def create_telegraph_article(title: str, body: str) -> str:
+    """Публикува статия в Telegraph и връща URL-а."""
+    import json
+
+    # Telegraph приема HTML съдържание
+    html_body = body.replace("\n\n", "</p><p>").replace("\n", "<br>")
+    html_body = f"<p>{html_body}</p>"
+
+    # Добави CTA в края
+    html_body += (
+        f'<p><strong>📢 Последвай нашия Telegram канал за още новини и промоции:</strong></p>'
+        f'<p><a href="https://t.me/{CHANNEL_ID.replace("@", "")}">👉 Присъедини се към {CHANNEL_ID}</a></p>'
+        f'<p><a href="https://atomybgakademia.org">🌐 atomybgakademia.org</a></p>'
+    )
+
+    data = {
+        "access_token": TELEGRAPH_TOKEN,
+        "title": title,
+        "content": html_body,
+        "author_name": "Atomy BG Академия",
+        "author_url": "https://atomybgakademia.org",
+        "return_content": False,
+    }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://api.telegra.ph/createPage",
+            json=data,
+            timeout=30
+        )
+        result = resp.json()
+
+    if result.get("ok"):
+        return result["result"]["url"]
+    else:
+        raise Exception(f"Telegraph error: {result}")
+
+async def post_article(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Нямате достъп.")
+        return
+    if not context.args:
+        await update.message.reply_text(
+            "Използване: /post_article <продукт>\n"
+            "Пример: /post_article HemoHIM G"
+        )
+        return
+    if not TELEGRAPH_TOKEN:
+        await update.message.reply_text("⚠️ TELEGRAPH_TOKEN не е зададен в Variables.")
+        return
+
+    product = " ".join(context.args)
+    await update.message.reply_text(f"🤖 Генериране на статия за {product}...")
+
+    try:
+        # 1. Генерирай дълга статия
+        article_prompt = (
+            f"Напиши подробна статия на български за {product} на Atomy. "
+            f"Структура:\n"
+            f"- Заглавие (едно изречение)\n"
+            f"- Какво е продуктът и за кого е подходящ\n"
+            f"- Ключови характеристики и съставки (само от системния промпт)\n"
+            f"- Цена и PV\n"
+            f"- Как да поръчате\n"
+            f"Дължина: 300-400 думи. Само информация от системния промпт."
+        )
+
+        article_response = openai_client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": article_prompt},
+            ],
+            max_tokens=3000,
+            temperature=0.3,
+        )
+        article_text = article_response.choices[0].message.content
+        article_text = re.sub(r'\[\d+\]', '', article_text).strip()
+
+        # Вземи заглавието от първия ред
+        lines = article_text.strip().split("\n")
+        title = lines[0].strip().lstrip("#").strip()
+        body = "\n".join(lines[1:]).strip()
+
+        # 2. Публикувай в Telegraph
+        await update.message.reply_text("📝 Публикуване в Telegraph...")
+        telegraph_url = await create_telegraph_article(title, body)
+
+        # 3. Генерирай кратък Telegram пост с линка
+        short_prompt = (
+            f"Напиши много кратък Telegram пост (3-4 изречения) за {product}. "
+            f"Започни с хук. Използвай само информацията от системния промпт. "
+            f"В края добави точно този ред: 📖 Прочети цялата статия: {telegraph_url}"
+        )
+        short_content = generate_content(short_prompt)
+
+        # 4. Публикувай в канала
+        if CHANNEL_ID:
+            await context.bot.send_message(chat_id=CHANNEL_ID, text=short_content)
+
+        await update.message.reply_text(
+            f"✅ Готово!\n\n"
+            f"📰 Статия: {telegraph_url}\n\n"
+            f"📱 Пост в канала:\n{short_content}"
+        )
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Грешка: {e}")
+
 # ─── MAIN ─────────────────────────────────────────────────────────────
 
 def main():
@@ -485,6 +628,8 @@ def main():
     app.add_handler(CommandHandler("confirm_broadcast", confirm_broadcast))
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("post_now", post_now))
+    app.add_handler(CommandHandler("post_link", post_link))
+    app.add_handler(CommandHandler("post_article", post_article))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
