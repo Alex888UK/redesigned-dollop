@@ -544,7 +544,7 @@ async def create_telegraph_article(title: str, body: str) -> str:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://api.telegra.ph/createPage",
-            json=data,
+            data=data,  # form data, не json
             timeout=30
         )
         result = resp.json()
