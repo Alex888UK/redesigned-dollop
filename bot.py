@@ -31,7 +31,6 @@ SYSTEM_PROMPT = Path("system_prompt.txt").read_text(encoding="utf-8")
 logger.info(f"System prompt loaded: {len(SYSTEM_PROMPT)} characters")
 
 # ─── FOOTER ───────────────────────────────────────────────────────────
-# 2 фиксирани хаштага — AI добавя 1 допълнителен от разрешения списък
 FIXED_HASHTAGS = "#АтомиПродукти #АтомиЗдраве"
 
 ALLOWED_HASHTAGS = [
@@ -51,8 +50,8 @@ DISCLAIMER = (
 )
 
 HASHTAG_INSTRUCTION = (
-    f"В самия край на поста добави САМО ЕДИН хаштаг от този списък "
-    f"(избери най-подходящия за темата на поста): "
+    "В самия край на поста добави САМО ЕДИН хаштаг от този списък "
+    "(избери най-подходящия за темата на поста): "
     + " ".join(ALLOWED_HASHTAGS)
 )
 
@@ -112,34 +111,36 @@ def get_response(user_id: int, user_message: str) -> str:
     return reply
 
 def clean_content(content: str) -> str:
-    """Премахва [1], [2] и стария disclaimer ако AI-ят го е добавил."""
+    """Премахва [1],[2], disclaimer и хаштагове от AI отговора."""
+    # Премахва [1], [2] и т.н.
     content = re.sub(r'\[\d+\]', '', content)
+    # Премахва disclaimer ако AI го е добавил
     content = re.sub(
         r'⚠️ Продуктите на Atomy.*?atomybgakademia\.org/contacts',
         '',
         content,
         flags=re.DOTALL
     )
-    # Премахва излишни хаштагове в края — ще ги добавим ние
-    content = re.sub(r'(#\S+\s*){2,}$', '', content, flags=re.MULTILINE)
+    # Премахва всички хаштагове — ще ги добавим от кода
+    content = re.sub(r'#\S+', '', content)
     return content.strip()
 
-def build_footer(ai_hashtag: str) -> str:
-    """Изгражда задължителния footer с disclaimer + хаштагове."""
-    # Вземи само валидни хаштагове от AI отговора
-    found = None
+def extract_hashtag(raw: str) -> str:
+    """Извлича валиден хаштаг от AI отговора."""
     for tag in ALLOWED_HASHTAGS:
-        if tag.lower() in ai_hashtag.lower():
-            found = tag
-            break
-    extra_tag = found if found else "#Здраве"
-    return f"\n{DISCLAIMER}\n\n{FIXED_HASHTAGS} {extra_tag}"
+        if tag.lower() in raw.lower():
+            return tag
+    return "#Здраве"  # резервен
+
+def build_footer(extra_tag: str) -> str:
+    """Изгражда задължителния footer."""
+    return f"\n\n{DISCLAIMER}\n\n{FIXED_HASHTAGS} {extra_tag}"
 
 def generate_content(prompt: str) -> str:
     full_prompt = (
         f"{prompt}\n\n"
         f"ВАЖНО: {HASHTAG_INSTRUCTION}\n"
-        f"НЕ добавяй disclaimer или контактна информация — тя ще бъде добавена автоматично."
+        f"НЕ добавяй disclaimer или контактна информация."
     )
 
     response = openai_client.chat.completions.create(
@@ -153,10 +154,16 @@ def generate_content(prompt: str) -> str:
     )
 
     raw = response.choices[0].message.content
+
+    # 1. Извлечи хаштага от суровия отговор
+    extra_tag = extract_hashtag(raw)
+
+    # 2. Почисти съдържанието
     content = clean_content(raw)
 
-    # Извлечи хаштага от AI отговора преди да го почистим
-    footer = build_footer(raw)
+    # 3. Добави footer с disclaimer + хаштагове
+    footer = build_footer(extra_tag)
+
     return content + footer
 
 # ─── BOT HANDLERS ─────────────────────────────────────────────────────
