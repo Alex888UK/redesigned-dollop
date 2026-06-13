@@ -424,6 +424,7 @@ async def confirm_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("pending_broadcast", None)
+    context.user_data.pop("pending_post", None)
     await update.message.reply_text("❌ Отказано.")
 
 # ─── CHANNEL POST ─────────────────────────────────────────────────────
@@ -469,9 +470,75 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Канал: {CHANNEL_ID or 'Не е зададен'}\n"
         f"• Пост часове (UTC): {POST_HOURS}\n"
         f"• Брой промпти: {len(CONTENT_PROMPTS)}\n"
+        f"• Чакащ пост: {'Да' if context.user_data.get('pending_post') else 'Не'}\n"
         f"• System prompt: {len(SYSTEM_PROMPT)} символа"
     )
 
+
+async def post_preview(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate a post preview before publishing to the channel."""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Нямате достъп.")
+        return
+
+    if not CHANNEL_ID:
+        await update.message.reply_text("⚠️ CHANNEL_ID не е зададен.")
+        return
+
+    import random
+    prompt = " ".join(context.args) if context.args else random.choice(CONTENT_PROMPTS)
+
+    await update.message.reply_text("🤖 Генериране на преглед...")
+
+    try:
+        content = generate_content(prompt)
+        context.user_data["pending_post"] = content
+
+        separator = "─" * 32
+        await update.message.reply_text(
+            f"👁 ПРЕГЛЕД НА ПОСТА:
+"
+            f"{separator}
+
+"
+            f"{content}
+
+"
+            f"{separator}
+"
+            f"📢 Канал: {CHANNEL_ID}
+
+"
+            f"✅ /confirm_post — публикувай в канала
+"
+            f"✏️ /post_preview <нов промпт> — генерирай нов
+"
+            f"❌ /cancel — откажи"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Грешка: {e}")
+
+
+async def confirm_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Publish the previewed post to the channel."""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    content = context.user_data.get("pending_post")
+    if not content:
+        await update.message.reply_text(
+            "⚠️ Няма чакащ пост за публикуване.
+"
+            "Използвай /post_preview <промпт> за да генерираш нов."
+        )
+        return
+
+    try:
+        await context.bot.send_message(chat_id=CHANNEL_ID, text=content)
+        context.user_data.pop("pending_post", None)
+        await update.message.reply_text(f"✅ Публикувано успешно в {CHANNEL_ID}!")
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Грешка при публикуване: {e}")
 
 async def post_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
@@ -517,6 +584,8 @@ def main():
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("post_now", post_now))
     app.add_handler(CommandHandler("post_link", post_link))
+    app.add_handler(CommandHandler("post_preview", post_preview))
+    app.add_handler(CommandHandler("confirm_post", confirm_post))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
