@@ -474,7 +474,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• System prompt: {len(SYSTEM_PROMPT)} символа"
     )
 
-
 async def post_preview(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate a post preview before publishing to the channel."""
     if update.effective_user.id not in ADMIN_IDS:
@@ -496,28 +495,17 @@ async def post_preview(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         separator = "─" * 32
         await update.message.reply_text(
-            f"👁 ПРЕГЛЕД НА ПОСТА:
-"
-            f"{separator}
-
-"
-            f"{content}
-
-"
-            f"{separator}
-"
-            f"📢 Канал: {CHANNEL_ID}
-
-"
-            f"✅ /confirm_post — публикувай в канала
-"
-            f"✏️ /post_preview <нов промпт> — генерирай нов
-"
+            f"👁 ПРЕГЛЕД НА ПОСТА:\n"
+            f"{separator}\n\n"
+            f"{content}\n\n"
+            f"{separator}\n"
+            f"📢 Канал: {CHANNEL_ID}\n\n"
+            f"✅ /confirm_post — публикувай в канала\n"
+            f"✏️ /post_preview <нов промпт> — генерирай нов\n"
             f"❌ /cancel — откажи"
         )
     except Exception as e:
         await update.message.reply_text(f"⚠️ Грешка: {e}")
-
 
 async def confirm_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Publish the previewed post to the channel."""
@@ -527,8 +515,7 @@ async def confirm_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     content = context.user_data.get("pending_post")
     if not content:
         await update.message.reply_text(
-            "⚠️ Няма чакащ пост за публикуване.
-"
+            "⚠️ Няма чакащ пост за публикуване.\n"
             "Използвай /post_preview <промпт> за да генерираш нов."
         )
         return
@@ -541,44 +528,38 @@ async def confirm_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Грешка при публикуване: {e}")
 
 async def post_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Usage: /post_link <product> | <page content> | <url>
+    Example: /post_link HemoHIM G | Билкова добавка за имунната система. Цена 105 EUR, 73,000 PV. | https://atomybgakademia.org/atomy
+    """
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("⛔ Нямате достъп.")
         return
-    if len(context.args) < 2:
+
+    # Parse using | as separator
+    full_text = update.message.text.replace("/post_link", "", 1).strip()
+    parts = [p.strip() for p in full_text.split("|")]
+
+    if len(parts) < 3:
         await update.message.reply_text(
-            "Използване: /post_link <продукт> <линк>\n"
-            "Пример: /post_link HemoHIM G https://atomybgakademia.org/atomy"
+            "Използване:\n"
+            "/post_link <продукт> | <текст от страницата> | <линк>\n\n"
+            "Пример:\n"
+            "/post_link HemoHIM G | HemoHIM G е билкова добавка за имунната система. Цена 105 EUR, 73,000 PV. Разработен с KAERI. | https://atomybgakademia.org/atomy"
         )
         return
 
-    link = context.args[-1]
-    product = " ".join(context.args[:-1])
+    product = parts[0]
+    page_content = parts[1]
+    link = parts[2]
 
-    await update.message.reply_text(f"⏳ Четa страницата: {link}")
+    await update.message.reply_text("🤖 Генериране...")
 
-    # Fetch the page
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(link, headers={"User-Agent": "Mozilla/5.0"})
-            html = resp.text
-
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header"]):
-            tag.decompose()
-        page_text = soup.get_text(separator="\n", strip=True)[:3000]
-
-    except Exception as e:
-        await update.message.reply_text(f"❌ Грешка при четене на страницата: {e}")
-        return
-
-    # Generate post ONLY from page content
     prompt = (
         f"Ти си маркетинг копирайтър за Atomy България.\n\n"
-        f"Напиши кратък рекламен Telegram пост на български за продукта \"{product}\".\n"
-        f"Използвай САМО информацията от тази страница — не добавяй нищо от себе си:\n\n"
-        f"{page_text}\n\n"
+        f"Напиши кратък рекламен Telegram пост на български за \"{product}\".\n"
+        f"Използвай САМО тази информация — не добавяй нищо от себе си:\n\n"
+        f"{page_content}\n\n"
         f"Изисквания:\n"
         f"- Максимум 300 знака основен текст\n"
         f"- Привлекателен, естествен тон\n"
@@ -587,7 +568,6 @@ async def post_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"- БЕЗ хаштагове, БЕЗ disclaimer"
     )
 
-    await update.message.reply_text("🤖 Генериране...")
     try:
         response = openai_client.chat.completions.create(
             model=MODEL,
