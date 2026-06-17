@@ -547,28 +547,64 @@ async def post_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
         await update.message.reply_text(
             "Използване: /post_link <продукт> <линк>\n"
-            "Пример: /post_link HemoHIM G https://graph.org/..."
+            "Пример: /post_link HemoHIM G https://atomybgakademia.org/atomy"
         )
         return
 
     link = context.args[-1]
     product = " ".join(context.args[:-1])
 
+    await update.message.reply_text(f"⏳ Четa страницата: {link}")
+
+    # Fetch the page
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(link, headers={"User-Agent": "Mozilla/5.0"})
+            html = resp.text
+
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+        page_text = soup.get_text(separator="\n", strip=True)[:3000]
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Грешка при четене на страницата: {e}")
+        return
+
+    # Generate post ONLY from page content
     prompt = (
-        f"Напиши кратък Telegram пост за {product}. "
-        f"Използвай само информацията от системния промпт. "
-        f"В самия край на основния текст — преди disclaimer — добави точно този ред: "
-        f"📖 Прочети повече: {link}"
+        f"Ти си маркетинг копирайтър за Atomy България.\n\n"
+        f"Напиши кратък рекламен Telegram пост на български за продукта \"{product}\".\n"
+        f"Използвай САМО информацията от тази страница — не добавяй нищо от себе си:\n\n"
+        f"{page_text}\n\n"
+        f"Изисквания:\n"
+        f"- Максимум 300 знака основен текст\n"
+        f"- Привлекателен, естествен тон\n"
+        f"- 1-2 емоджи\n"
+        f"- В края добави: 📖 Прочети повече: {link}\n"
+        f"- БЕЗ хаштагове, БЕЗ disclaimer"
     )
 
-    await update.message.reply_text("🤖 Генериране и публикуване...")
+    await update.message.reply_text("🤖 Генериране...")
     try:
-        content = generate_content(prompt)
+        response = openai_client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+            temperature=0.5,
+        )
+        raw = response.choices[0].message.content.strip()
+        extra_tag = extract_hashtag(raw)
+        clean = clean_content(raw)
+        footer = build_footer(extra_tag)
+        content = clean + footer
+
         await context.bot.send_message(chat_id=CHANNEL_ID, text=content)
         await update.message.reply_text(f"✅ Публикувано:\n\n{content}")
     except Exception as e:
         await update.message.reply_text(f"⚠️ Грешка: {e}")
-
 
 # ─── MAIN ─────────────────────────────────────────────────────────────
 
